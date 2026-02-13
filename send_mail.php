@@ -1,7 +1,6 @@
 <?php
 date_default_timezone_set('Asia/Kolkata');
 
-// Allow only POST request
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: index.html");
     exit;
@@ -21,25 +20,18 @@ if (!$name || !$email || !$phone) {
     exit;
 }
 
-// Split name
-$nameParts = explode(" ", $name, 2);
-$firstName = $nameParts[0];
-$lastName  = $nameParts[1] ?? "";
-
 /* ================= CRM SUBMISSION ================= */
 
-$crmUrl = 'https://api-in21.leadsquared.com/v2/LeadManagement.svc/Lead.Capture?accessKey=u$r809e24bb805afa1a050331c6cf61b994&secretKey=b09aa150b3e011b4589e29704d3ce9d85b28b7fb';
 
+$crmUrl = 'https://api-in21.leadsquared.com/v2/LeadManagement.svc/Lead.Capture?accessKey=u$r809e24bb805afa1a050331c6cf61b994&secretKey=b09aa150b3e011b4589e29704d3ce9d85b28b7fb';
 $crmData = [
-    ["Attribute"=>"FirstName","Value"=>$firstName],
-    ["Attribute"=>"LastName","Value"=>$lastName],
+    ["Attribute"=>"FirstName","Value"=>$name],
     ["Attribute"=>"EmailAddress","Value"=>$email],
     ["Attribute"=>"Phone","Value"=>$phone],
     ["Attribute"=>"mx_Project_Name","Value"=>$project],
-    ["Attribute"=>"mx_City","Value"=>$location],
-    ["Attribute"=>"SearchBy","Value"=>"Phone"],
-    ["Attribute"=>"LeadType","Value"=>"OT_1"]
+    ["Attribute"=>"mx_City","Value"=>$location]
 ];
+
 
 $ch = curl_init($crmUrl);
 curl_setopt_array($ch, [
@@ -53,14 +45,38 @@ $crmResponse = curl_exec($ch);
 $crmHttp     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-/* ================= GOOGLE SHEETS ================= */
+/* ==================================================
+                 GOOGLE SHEETS (UNCHANGED STRUCTURE)
+   ================================================== */
+
+$ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+$ip = explode(',', $ip)[0];
+
+if ($ip === '127.0.0.1' || $ip === '::1') {
+    $geo = ['country'=>'Localhost','region'=>'Localhost','city'=>'Localhost','org'=>'Localhost'];
+} else {
+    $ch = curl_init("https://ipwho.is/{$ip}");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $d = $response ? json_decode($response,true) : [];
+    $geo = [
+        'country' => $d['country'] ?? 'Unknown',
+        'region'  => $d['region'] ?? 'Unknown',
+        'city'    => $d['city'] ?? 'Unknown',
+        'org'     => $d['org'] ?? 'Unknown'
+    ];
+}
+
+/* Sheet Functions */
 
 function base64url_encode($data) {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 }
 
 function create_jwt($payload, $privateKey) {
-    $header = ['alg'=>'RS256','typ'=>'JWT'];
+    $header = ['alg' => 'RS256', 'typ' => 'JWT'];
     $segments = [];
     $segments[] = base64url_encode(json_encode($header));
     $segments[] = base64url_encode(json_encode($payload));
@@ -70,6 +86,8 @@ function create_jwt($payload, $privateKey) {
     return implode('.', $segments);
 }
 
+/* Sheet Row (CLIENT only in sheet, not CRM) */
+
 $sheetRow = [
     date("Y-m-d H:i:s"),
     $name,
@@ -77,70 +95,62 @@ $sheetRow = [
     $phone,
     $project,
     $location,
-    $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0',
-    "",
-    "",
-    "",
+    $ip,
+    $geo['country'],
+    $geo['region'],
+    $geo['city'],
     $Client
 ];
 
-$spreadsheetId = "YOUR_SHEET_ID";
+$spreadsheetId = "1YWz7-G8AMWpchCUeSDmQbgAHEOJHNRfuIJIghYS1EPg";
 $sheetName = "Leads";
-$serviceAccountEmail = "YOUR_SERVICE_ACCOUNT_EMAIL";
-$privateKeyPath = __DIR__ . "/key.pem";
+$serviceAccountEmail = "vikram@lead-management-480107.iam.gserviceaccount.com";
+$privateKey = file_get_contents(__DIR__ . "/key.pem");
 
-if (file_exists($privateKeyPath)) {
+$now = time();
+$payload = [
+    "iss"   => $serviceAccountEmail,
+    "scope" => "https://www.googleapis.com/auth/spreadsheets",
+    "aud"   => "https://oauth2.googleapis.com/token",
+    "exp"   => $now + 3600,
+    "iat"   => $now
+];
 
-    $privateKey = file_get_contents($privateKeyPath);
+$jwt = create_jwt($payload, $privateKey);
 
-    $now = time();
-    $payload = [
-        "iss"=>$serviceAccountEmail,
-        "scope"=>"https://www.googleapis.com/auth/spreadsheets",
-        "aud"=>"https://oauth2.googleapis.com/token",
-        "exp"=>$now+3600,
-        "iat"=>$now
-    ];
+$tokenCurl = curl_init("https://oauth2.googleapis.com/token");
+curl_setopt($tokenCurl, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($tokenCurl, CURLOPT_POST, true);
+curl_setopt($tokenCurl, CURLOPT_POSTFIELDS, http_build_query([
+    "grant_type" => "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    "assertion"  => $jwt
+]));
+$tokenResponse = json_decode(curl_exec($tokenCurl), true);
+curl_close($tokenCurl);
 
-    $jwt = create_jwt($payload, $privateKey);
+if (isset($tokenResponse['access_token'])) {
 
-    $tokenCurl = curl_init("https://oauth2.googleapis.com/token");
-    curl_setopt_array($tokenCurl, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => http_build_query([
-            "grant_type"=>"urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion"=>$jwt
-        ])
+    $accessToken = $tokenResponse['access_token'];
+
+    $appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$sheetName}!A1:append?valueInputOption=RAW";
+    $postData = ["values" => [$sheetRow]];
+
+    $sheetCurl = curl_init($appendUrl);
+    curl_setopt($sheetCurl, CURLOPT_HTTPHEADER, [
+        "Authorization: Bearer {$accessToken}",
+        "Content-Type: application/json"
     ]);
-
-    $tokenResponse = json_decode(curl_exec($tokenCurl), true);
-    curl_close($tokenCurl);
-
-    if (isset($tokenResponse['access_token'])) {
-
-        $appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$sheetName}!A1:append?valueInputOption=RAW";
-
-        $sheetCurl = curl_init($appendUrl);
-        curl_setopt_array($sheetCurl, [
-            CURLOPT_HTTPHEADER => [
-                "Authorization: Bearer ".$tokenResponse['access_token'],
-                "Content-Type: application/json"
-            ],
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode(["values"=>[$sheetRow]]),
-            CURLOPT_RETURNTRANSFER => true
-        ]);
-
-        curl_exec($sheetCurl);
-        curl_close($sheetCurl);
-    }
+    curl_setopt($sheetCurl, CURLOPT_POST, true);
+    curl_setopt($sheetCurl, CURLOPT_POSTFIELDS, json_encode($postData));
+    curl_setopt($sheetCurl, CURLOPT_RETURNTRANSFER, true);
+    curl_exec($sheetCurl);
+    curl_close($sheetCurl);
 }
 
 /* ================= FINAL REDIRECT ================= */
 
 if ($crmHttp == 200) {
-    header("Location: thank-you.html");
+    header("Location: thankyou.html");
     exit;
 } else {
     header("Location: index.html?error=crm_failed");
