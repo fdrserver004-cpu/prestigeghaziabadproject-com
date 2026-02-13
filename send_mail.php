@@ -181,8 +181,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($email) {
             $mail->addReplyTo($email, $name);
         }
-        $mail->addAddress('thebigcarpethomes@gmail.com');
-        $mail->addAddress('vinaymachha@gmail.com');
+        $mail->addAddress('vikramch9910@gmail.com');
+        
 
         $mail->isHTML(true);
         $mail->Subject = $project ?: 'New Enquiry';
