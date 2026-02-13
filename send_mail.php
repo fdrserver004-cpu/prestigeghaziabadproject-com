@@ -150,7 +150,7 @@ if (isset($tokenResponse['access_token'])) {
 /* ================= FINAL REDIRECT ================= */
 
 if ($crmHttp == 200) {
-    header("Location: thankyou.html");
+    header("Location: thank-you.html");
     exit;
 } else {
     header("Location: index.html?error=crm_failed");
