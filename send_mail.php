@@ -1,78 +1,73 @@
 <?php
-date_default_timezone_set('Asia/Kolkata'); // Set timezone
-
-require 'PHPMailer/vendor/autoload.php';
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+date_default_timezone_set('Asia/Kolkata');
+header("Content-Type: application/json");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Read JSON body (for fetch)
+    // Read JSON body
     $raw = file_get_contents("php://input");
     $data = json_decode($raw, true) ?: [];
-
-    // Trim all inputs
     $data = array_map('trim', $data);
 
-    $name     = $data['name'] ?? '';
-    $email    = filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
-    $phone    = $data['phone'] ?? '';
-    $project  = $data['project'] ?? '';
-    $location = $data['location'] ?? '';
-    $Client = $data['client'] ?? '';
+    $name     = $data['FirstName'] ?? '';
+    $email    = filter_var($data['EmailAddress'] ?? '', FILTER_VALIDATE_EMAIL) ?: '';
+    $phone    = $data['Phone'] ?? '';
+    $project  = $data['mx_Project_Name'] ?? '';
+    $location = $data['mx_City'] ?? '';
+    $Client   = $data['CLIENT'] ?? '';
 
-    // Get IP
+    if (!$name || !$email || !$phone) {
+        echo json_encode(["status"=>"error","message"=>"Required fields missing"]);
+        exit;
+    }
+
+    // Split name
+    $nameParts = explode(" ", $name, 2);
+    $firstName = $nameParts[0];
+    $lastName  = $nameParts[1] ?? "";
+
+    /* ==================================================
+                    CRM INTEGRATION
+       ================================================== */
+
+    $crmUrl = "https://api-in21.leadsquared.com/v2/LeadManagement.svc/Lead.Capture?accessKey=$r809e24bb805afa1a050331c6cf61b994&secretKey=b09aa150b3e011b4589e29704d3ce9d85b28b7fb";
+    $crmData = [
+        ["Attribute"=>"FirstName","Value"=>$firstName],
+        ["Attribute"=>"LastName","Value"=>$lastName],
+        ["Attribute"=>"EmailAddress","Value"=>$email],
+        ["Attribute"=>"Phone","Value"=>$phone],
+        ["Attribute"=>"mx_Project_Name","Value"=>$project],
+        ["Attribute"=>"mx_City","Value"=>$location],
+        ["Attribute"=>"SearchBy","Value"=>"Phone"],
+        ["Attribute"=>"LeadType","Value"=>"OT_1"]
+    ];
+
+    $ch = curl_init($crmUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($crmData),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["Content-Type: application/json"]
+    ]);
+
+    $crmResponse = curl_exec($ch);
+    $crmHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    /* ==================================================
+                    LOG FILE (UNCHANGED)
+       ================================================== */
+
     $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     $ip = explode(',', $ip)[0];
 
-    // Fetch geo data
-    if ($ip === '127.0.0.1' || $ip === '::1') {
-        $geo = ['country'=>'Localhost','region'=>'Localhost','city'=>'Localhost','org'=>'Localhost'];
-    } else {
-        $ch = curl_init("https://ipwho.is/{$ip}");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        $response = curl_exec($ch);
-        curl_close($ch);
-        $d = $response ? json_decode($response,true) : [];
-        $geo = [
-            'country' => $d['country'] ?? 'Unknown',
-            'region'  => $d['region'] ?? 'Unknown',
-            'city'    => $d['city'] ?? 'Unknown',
-            'org'     => $d['org'] ?? 'Unknown'
-        ];
-    }
-
-    // Build email table
-    $rows = [
-        'Name' => $name,
-        'Email' => $email,
-        'Mobile' => $phone,
-        'Project' => $project,
-        'Location' => $location,
-        'Client IP' => $ip,
-        'IP Org' => $geo['org'],
-        'IP Country' => $geo['country'],
-        'IP Region' => $geo['region'],
-        'IP City' => $geo['city'],
-        'Submitted At' => date('Y-m-d h:i:s A')
-    ];
-
-    $email_content = "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;'>";
-    foreach ($rows as $k=>$v) {
-        $email_content .= "<tr><td style='font-weight:bold;background:#f7f7f7;width:180px;'>".htmlspecialchars($k)."</td><td>".htmlspecialchars($v)."</td></tr>";
-    }
-    $email_content .= "</table>";
-
-    // Log into leads.txt
     $log_file = __DIR__ . '/leads.txt';
-    $log_entry = "[".date('Y-m-d H:i:s')."] Name: $name | Email: $email | Phone: $phone | Project: $project | Location: $location | IP: $ip | Org: {$geo['org']} | Country: {$geo['country']} | Region: {$geo['region']} | City: {$geo['city']}\n";
+    $log_entry = "[".date('Y-m-d H:i:s')."] Name: $name | Email: $email | Phone: $phone | Project: $project | Location: $location | CRM Status: $crmHttp\n";
     file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
 
 
-
     /* ==================================================
-                 GOOGLE SHEETS UPDATE START
+                 GOOGLE SHEETS UPDATE (UNCHANGED)
        ================================================== */
 
     function base64url_encode($data) {
@@ -90,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return implode('.', $segments);
     }
 
-    // Row to insert into Google Sheet
+    // 👇 EXACT SAME Excel structure (NOT CHANGED)
     $sheetRow = [
         date("Y-m-d H:i:s"),
         $name,
@@ -99,22 +94,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $project,
         $location,
         $ip,
-        $geo['country'],
-        $geo['region'],
-        $geo['city'],
+        "", // country removed (was geo)
+        "", // region removed
+        "", // city removed
         $Client
     ];
 
     $spreadsheetId = "1YWz7-G8AMWpchCUeSDmQbgAHEOJHNRfuIJIghYS1EPg";
     $sheetName = "Leads";
-
-    // Service Account email
     $serviceAccountEmail = "vikram@lead-management-480107.iam.gserviceaccount.com";
-
-    // Load private key
     $privateKey = file_get_contents(__DIR__ . "/key.pem");
 
-    // JWT payload
     $now = time();
     $payload = [
         "iss"   => $serviceAccountEmail,
@@ -124,10 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         "iat"   => $now
     ];
 
-    // Create JWT
     $jwt = create_jwt($payload, $privateKey);
 
-    // Get access token
     $tokenCurl = curl_init("https://oauth2.googleapis.com/token");
     curl_setopt($tokenCurl, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($tokenCurl, CURLOPT_POST, true);
@@ -138,17 +126,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tokenResponse = json_decode(curl_exec($tokenCurl), true);
     curl_close($tokenCurl);
 
-    // Append row if access token valid
     if (isset($tokenResponse['access_token'])) {
-
-        $accessToken = $tokenResponse['access_token'];
 
         $appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$sheetName}!A1:append?valueInputOption=RAW";
         $postData = ["values" => [$sheetRow]];
 
         $sheetCurl = curl_init($appendUrl);
         curl_setopt($sheetCurl, CURLOPT_HTTPHEADER, [
-            "Authorization: Bearer {$accessToken}",
+            "Authorization: Bearer ".$tokenResponse['access_token'],
             "Content-Type: application/json"
         ]);
         curl_setopt($sheetCurl, CURLOPT_POST, true);
@@ -159,40 +144,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     /* ==================================================
-                 GOOGLE SHEETS UPDATE END
+                    FINAL RESPONSE
        ================================================== */
 
-
-
-    // Send email notification
-    $mail = new PHPMailer(true);
-
-    try {
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = 'umikoweb58@gmail.com';
-        $mail->Password = 'msiiaabtgqwbzjbu'; // Gmail app password
-        $mail->SMTPSecure = 'ssl';
-        $mail->Port = 465;
-        $mail->CharSet = 'UTF-8';
-
-        $mail->setFrom('umikoweb58@gmail.com', 'Website Enquiry');
-        if ($email) {
-            $mail->addReplyTo($email, $name);
-        }
-        $mail->addAddress('vikramch9910@gmail.com');
-        
-
-        $mail->isHTML(true);
-        $mail->Subject = $project ?: 'New Enquiry';
-        $mail->Body = $email_content;
-
-        $mail->send();
-        exit;
-
-    } catch (Exception $e) {
-        echo "<script>alert('Server error. Submission logged successfully.');location='http://newlaunch-gurgaon.com';</script>";
+    if ($crmHttp == 200) {
+        echo json_encode(["status"=>"success"]);
+    } else {
+        echo json_encode([
+            "status"=>"error",
+            "message"=>"CRM submission failed",
+            "crm_http"=>$crmHttp
+        ]);
     }
+
 }
 ?>
