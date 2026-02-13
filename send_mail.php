@@ -3,7 +3,7 @@ date_default_timezone_set('Asia/Kolkata');
 
 // Allow only POST request
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: index.php");
+    header("Location: index.html");
     exit;
 }
 
@@ -17,7 +17,7 @@ $location = trim($_POST['mx_City'] ?? '');
 $Client   = trim($_POST['CLIENT'] ?? '');
 
 if (!$name || !$email || !$phone) {
-    header("Location: index.php?error=missing_fields");
+    header("Location: index.html?error=missing_fields");
     exit;
 }
 
@@ -28,7 +28,7 @@ $lastName  = $nameParts[1] ?? "";
 
 /* ================= CRM SUBMISSION ================= */
 
-$crmUrl = "https://api-in21.leadsquared.com/v2/LeadManagement.svc/Lead.Capture?accessKey=YOUR_ACCESS_KEY&secretKey=YOUR_SECRET_KEY";
+$crmUrl = 'https://api-in21.leadsquared.com/v2/LeadManagement.svc/Lead.Capture?accessKey=u$r809e24bb805afa1a050331c6cf61b994&secretKey=b09aa150b3e011b4589e29704d3ce9d85b28b7fb';
 
 $crmData = [
     ["Attribute"=>"FirstName","Value"=>$firstName],
@@ -143,7 +143,7 @@ if ($crmHttp == 200) {
     header("Location: thank-you.html");
     exit;
 } else {
-    header("Location: index.php?error=crm_failed");
+    header("Location: index.html?error=crm_failed");
     exit;
 }
 ?>
