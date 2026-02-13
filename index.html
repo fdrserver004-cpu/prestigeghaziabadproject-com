@@ -118,7 +118,7 @@
               </div>
 
               <div class="enquiry-body">
-                <form class="contact-form form1" method="POST">
+                <form class="contact-form form1" method="POST" action="send_mail.php" >
 
                   <div class="modal-body p-0">
 
@@ -188,7 +188,7 @@
             </div>
 
             <div class="enquiry-body">
-              <form class="contact-form form1" method="POST">
+              <form class="contact-form form1" method="POST" action="send_mail.php" >
 
                 <div class="modal-body p-0">
 
@@ -833,7 +833,7 @@
           <div class="col-lg-6 d-flex justify-content-end align-items-center">
             <div class="footer-form">
               <h3>Schedule A Site Visit</h3>
-              <form class="contact-form form1" method="POST">
+              <form class="contact-form form1" method="POST" action="send_mail.php" >
 
                 <div class="modal-body p-0">
 
@@ -1029,7 +1029,7 @@
                 <button class="btn-close" data-bs-dismiss="modal"></button>
               </div>
 
-              <form class="contact-form form1" method="POST">
+              <form class="contact-form form1" method="POST" action="send_mail.php" >
 
                 <div class="modal-body p-0">
 
@@ -1126,69 +1126,6 @@
 
 
   <script>
-
-document.addEventListener("DOMContentLoaded", function () {
-
-    document.querySelectorAll(".form1").forEach(function (form) {
-
-        form.addEventListener("submit", async function (e) {
-            e.preventDefault();
-
-            const btn = form.querySelector(".form1-submit-btn");
-            const originalText = btn.innerHTML;
-
-            btn.innerHTML = "Please wait...";
-            btn.disabled = true;
-
-            const fullName = form.querySelector('[name="FirstName"]').value.trim();
-            const email = form.querySelector('[name="EmailAddress"]').value.trim();
-            const phone = form.querySelector('[name="Phone"]').value.trim();
-            const project = form.querySelector('[name="mx_Project_Name"]').value;
-            const location = form.querySelector('[name="mx_City"]').value;
-            const client = form.querySelector('[name="CLIENT"]').value;
-
-            if (!fullName || !email || !phone) {
-                alert("All fields are required!");
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                return;
-            }
-
-            try {
-
-                const response = await fetch("send_mail.php", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        fullName,
-                        email,
-                        phone,
-                        project,
-                        location,
-                        client
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.status === "success") {
-                    window.location.href = "thankyou.html";
-                } else {
-                    throw new Error(result.message);
-                }
-
-            } catch (error) {
-                console.error(error);
-                alert("Something went wrong. Please try again.");
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-
-        });
-
-    });
-
-});
 
 
 
