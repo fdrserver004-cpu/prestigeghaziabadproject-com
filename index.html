@@ -78,7 +78,7 @@
         <div class="banner-description">
           <!-- <div class="launch-text">SPECIAL OFFER PERIOD, VALID FOR LIMITED UNITS</div> -->
           <div class="banner-name">
-            <h1>FDR SERVERAMM</h1>
+            <h1>FDR SERVERAMMM</h1>
             <h4> <i class="fa-solid fa-location-dot"></i> At Ghodbunder Road, Thane</h4>
           </div>
           <div class="banner-highlight d-none -lg-block">
@@ -1134,23 +1134,23 @@ document.addEventListener("DOMContentLoaded", function () {
         form.addEventListener("submit", async function (e) {
             e.preventDefault();
 
-            const submitBtn = form.querySelector(".form1-submit-btn");
-            const originalText = submitBtn.innerHTML;
+            const btn = form.querySelector(".form1-submit-btn");
+            const originalText = btn.innerHTML;
 
-            submitBtn.innerHTML = "Please wait...";
-            submitBtn.disabled = true;
+            btn.innerHTML = "Please wait...";
+            btn.disabled = true;
 
-            const fullName = form.querySelector('[name="FirstName"]')?.value.trim() || '';
-            const email = form.querySelector('[name="EmailAddress"]')?.value.trim() || '';
-            const phone = form.querySelector('[name="Phone"]')?.value.trim() || '';
-            const project = form.querySelector('[name="mx_Project_Name"]')?.value || '';
-            const location = form.querySelector('[name="mx_City"]')?.value || '';
-            const client = form.querySelector('[name="CLIENT"]')?.value || '';
+            const fullName = form.querySelector('[name="FirstName"]').value.trim();
+            const email = form.querySelector('[name="EmailAddress"]').value.trim();
+            const phone = form.querySelector('[name="Phone"]').value.trim();
+            const project = form.querySelector('[name="mx_Project_Name"]').value;
+            const location = form.querySelector('[name="mx_City"]').value;
+            const client = form.querySelector('[name="CLIENT"]').value;
 
             if (!fullName || !email || !phone) {
                 alert("All fields are required!");
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
+                btn.innerHTML = originalText;
+                btn.disabled = false;
                 return;
             }
 
@@ -1158,34 +1158,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 const response = await fetch("send_mail.php", {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        fullName: fullName,
-                        email: email,
-                        phone: phone,
-                        project: project,
-                        location: location,
-                        client: client
+                        fullName,
+                        email,
+                        phone,
+                        project,
+                        location,
+                        client
                     })
                 });
-
-                if (!response.ok) throw new Error("Server error");
 
                 const result = await response.json();
 
                 if (result.status === "success") {
                     window.location.href = "thankyou.html";
                 } else {
-                    throw new Error(result.message || "Submission failed");
+                    throw new Error(result.message);
                 }
 
             } catch (error) {
-                console.error("AJAX Error:", error);
+                console.error(error);
                 alert("Something went wrong. Please try again.");
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             }
 
         });
