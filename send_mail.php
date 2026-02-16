@@ -68,76 +68,89 @@ if (!in_array($ip, ['127.0.0.1','::1'])) {
 }
 
 /* ================= GOOGLE SHEET (ALWAYS RUNS) ================= */
+function base64url_encode($data) {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
 
-function base64url($d){
-    return rtrim(strtr(base64_encode($d), '+/', '-_'), '=');
-}
+    function create_jwt($payload, $privateKey) {
+        $header = ['alg' => 'RS256', 'typ' => 'JWT'];
+        $segments = [];
+        $segments[] = base64url_encode(json_encode($header));
+        $segments[] = base64url_encode(json_encode($payload));
+        $signing_input = implode('.', $segments);
+        openssl_sign($signing_input, $signature, $privateKey, "SHA256");
+        $segments[] = base64url_encode($signature);
+        return implode('.', $segments);
+    }
 
-function jwt($payload, $key){
-    $header = base64url(json_encode(['alg'=>'RS256','typ'=>'JWT']));
-    $body   = base64url(json_encode($payload));
-    openssl_sign("$header.$body", $sig, $key, 'SHA256');
-    return "$header.$body.".base64url($sig);
-}
+    // Row to insert into Google Sheet
+    $sheetRow = [
+        date("Y-m-d H:i:s"),
+        $name,
+        $email,
+        $phone,
+        $project,
+        $location,
+        $ip,
+        $geo['country'],
+        $geo['region'],
+        $geo['city'],
+        $Client
+    ];
 
-/*
-Excel / Google Sheet column order:
-Date | Name | Email | Phone | Project | Location | IP | Country | Region | City | Client | crm-status
-*/
+    $spreadsheetId = "1_3xJfI4wh-Zx3liNjSC3oRl157qSp99J6-fKDfuoRZ8";
+    $sheetName = "Leads";
 
-$sheetRow = [
-    date('Y-m-d H:i:s'),
-    $name,
-    $email,
-    $phone,
-    $project,
-    $location,
-    $ip,
-    $geo['country'],
-    $geo['region'],
-    $geo['city'],
-    $client,
-    $crmSuccess ? 'SUCCESS' : 'FAILED'
-];
+    // Service Account email
+    $serviceAccountEmail = "fdr-939@fdrserver.iam.gserviceaccount.com";
 
-$spreadsheetId = "1_3xJfI4wh-Zx3liNjSC3oRl157qSp99J6-fKDfuoRZ8";
-$sheetName = "Leads";
-$serviceEmail = "fdr-939@fdrserver.iam.gserviceaccount.com";
-$key = file_get_contents(__DIR__.'/key.pem');
+    // Load private key
+    $privateKey = file_get_contents(__DIR__ . "/key.pem");
 
-$payload = [
-    "iss"=>$serviceEmail,
-    "scope"=>"https://www.googleapis.com/auth/spreadsheets",
-    "aud"=>"https://oauth2.googleapis.com/token",
-    "exp"=>time()+3600,
-    "iat"=>time()
-];
+    // JWT payload
+    $now = time();
+    $payload = [
+        "iss"   => $serviceAccountEmail,
+        "scope" => "https://www.googleapis.com/auth/spreadsheets",
+        "aud"   => "https://oauth2.googleapis.com/token",
+        "exp"   => $now + 3600,
+        "iat"   => $now
+    ];
 
-$tokenRes = json_decode(
-    shell_exec(
-        "curl -s -X POST https://oauth2.googleapis.com/token -d 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion="
-        . jwt($payload,$key) . "'"
-    ),
-    true
-);
+    // Create JWT
+    $jwt = create_jwt($payload, $privateKey);
 
-if (!empty($tokenRes['access_token'])) {
-    $appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/$sheetName!A1:append?valueInputOption=RAW";
+    // Get access token
+    $tokenCurl = curl_init("https://oauth2.googleapis.com/token");
+    curl_setopt($tokenCurl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($tokenCurl, CURLOPT_POST, true);
+    curl_setopt($tokenCurl, CURLOPT_POSTFIELDS, http_build_query([
+        "grant_type" => "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "assertion"  => $jwt
+    ]));
+    $tokenResponse = json_decode(curl_exec($tokenCurl), true);
+    curl_close($tokenCurl);
 
-    $c = curl_init($appendUrl);
-    curl_setopt_array($c, [
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer ".$tokenRes['access_token'],
+    // Append row if access token valid
+    if (isset($tokenResponse['access_token'])) {
+
+        $accessToken = $tokenResponse['access_token'];
+
+        $appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$sheetName}!A1:append?valueInputOption=RAW";
+        $postData = ["values" => [$sheetRow]];
+
+        $sheetCurl = curl_init($appendUrl);
+        curl_setopt($sheetCurl, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer {$accessToken}",
             "Content-Type: application/json"
-        ],
-        CURLOPT_POSTFIELDS => json_encode(['values'=>[$sheetRow]]),
-        CURLOPT_TIMEOUT => 5
-    ]);
-    curl_exec($c);
-    curl_close($c);
-}
+        ]);
+        curl_setopt($sheetCurl, CURLOPT_POST, true);
+        curl_setopt($sheetCurl, CURLOPT_POSTFIELDS, json_encode($postData));
+        curl_setopt($sheetCurl, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($sheetCurl);
+        curl_close($sheetCurl);
+    }
+
 
 /* ================= FINAL RESPONSE ================= */
 
