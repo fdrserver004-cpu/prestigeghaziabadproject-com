@@ -78,7 +78,7 @@
         <div class="banner-description">
           <!-- <div class="launch-text">SPECIAL OFFER PERIOD, VALID FOR LIMITED UNITS</div> -->
           <div class="banner-name">
-            <h1>FDR SERVER</h1>
+            <h1>FDR SERVERE</h1>
             <h4> <i class="fa-solid fa-location-dot"></i> At Ghodbunder Road, Thane</h4>
           </div>
           <div class="banner-highlight d-none -lg-block">
@@ -118,7 +118,7 @@
               </div>
 
               <div class="enquiry-body">
-                <form class="contact-form form1" method="POST" action="send_mail.php" >
+                <form class="contact-form form1" method="POST">
 
                   <div class="modal-body p-0">
 
@@ -188,7 +188,7 @@
             </div>
 
             <div class="enquiry-body">
-              <form class="contact-form form1" method="POST" action="send_mail.php" >
+              <form class="contact-form form1" method="POST">
 
                 <div class="modal-body p-0">
 
@@ -833,7 +833,7 @@
           <div class="col-lg-6 d-flex justify-content-end align-items-center">
             <div class="footer-form">
               <h3>Schedule A Site Visit</h3>
-              <form class="contact-form form1" method="POST" action="send_mail.php" >
+              <form class="contact-form form1" method="POST">
 
                 <div class="modal-body p-0">
 
@@ -1029,7 +1029,7 @@
                 <button class="btn-close" data-bs-dismiss="modal"></button>
               </div>
 
-              <form class="contact-form form1" method="POST" action="send_mail.php" >
+              <form class="contact-form form1" method="POST">
 
                 <div class="modal-body p-0">
 
@@ -1126,7 +1126,31 @@
 
 
   <script>
+document.querySelectorAll('.form1').forEach(form => {
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
 
+    const btn = form.querySelector('.form1-submit-btn');
+    btn.disabled = true;
+    btn.innerText = 'Submitting...';
+
+    const formData = new FormData(form);
+
+    fetch('send_mail.php', {
+      method: 'POST',
+      body: formData
+    })
+    .then(r => r.json())
+    .then(() => {
+      // Always redirect (even if CRM failed)
+      window.location.href = 'thank-you.html';
+    })
+    .catch(() => {
+      // Network / server issue → still redirect
+      window.location.href = 'thank-you.html';
+    });
+  });
+});
 
 
 
